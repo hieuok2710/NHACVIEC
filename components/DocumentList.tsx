@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { Document, DocumentStatus, Priority } from '../types';
 import { formatDate, getDocumentStatusColor } from '../utils';
-import { FileText, AlertTriangle, CheckCircle, Clock, ArrowRight, Bell, Plus, X, Save, Upload, Paperclip, Filter, Pencil, RotateCcw, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { FileText, AlertTriangle, CheckCircle, Clock, ArrowRight, Bell, Plus, X, Save, Upload, Paperclip, Filter, Pencil, RotateCcw, ArrowUp, ArrowDown, ChevronsUpDown, AlertCircle } from 'lucide-react';
 
 interface DocumentListProps {
   documents: Document[];
@@ -605,8 +606,18 @@ export const DocumentList: React.FC<DocumentListProps> = ({ documents, onUpdateS
             <tbody className="divide-y divide-gray-100">
               {displayDocs.map((doc) => {
                 const isOverdue = doc.status === DocumentStatus.OVERDUE;
+                
+                // Calculate isDueSoon
+                const deadlineDate = new Date(doc.deadline);
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                deadlineDate.setHours(0,0,0,0);
+                const diffTime = deadlineDate.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const isDueSoon = !isOverdue && doc.status !== DocumentStatus.COMPLETED && diffDays >= 0 && diffDays <= 3;
+
                 return (
-                <tr key={doc.id} className={`hover:bg-slate-50 transition-colors group ${isOverdue ? 'bg-red-50/30' : ''}`}>
+                <tr key={doc.id} className={`hover:bg-slate-50 transition-colors group ${isOverdue ? 'bg-red-50/30' : isDueSoon ? 'bg-amber-50/40' : ''}`}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                         {isOverdue && (
@@ -642,9 +653,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({ documents, onUpdateS
                      </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className={`flex items-center gap-1.5 text-sm font-medium ${isOverdue ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                      <Clock className={`w-4 h-4 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} />
+                    <div className={`flex items-center gap-1.5 text-sm font-medium ${isOverdue ? 'text-red-600 font-bold' : isDueSoon ? 'text-amber-600 font-bold' : 'text-gray-600'}`}>
+                      <Clock className={`w-4 h-4 ${isOverdue ? 'text-red-500' : isDueSoon ? 'text-amber-500' : 'text-gray-400'}`} />
                       {formatDate(new Date(doc.deadline))}
+                      {isDueSoon && (
+                         <span title="Sắp đến hạn" className="flex items-center justify-center bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 ml-1 text-[10px] font-bold">
+                            Sắp hạn
+                         </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
