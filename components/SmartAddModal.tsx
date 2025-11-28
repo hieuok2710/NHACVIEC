@@ -1,32 +1,24 @@
 
 import React, { useState } from 'react';
 import { CalendarEvent, EventType, Document, Priority } from '../types';
-import { X, Calendar, MapPin, AlignLeft, Clock, FileText, Building2, AlertTriangle, Hash, ScanLine, Upload, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Calendar, MapPin, AlignLeft, Clock, FileText, Building2, AlertTriangle, Hash } from 'lucide-react';
 import { formatTime } from '../utils';
-import { extractScheduleFromImage } from '../services/gemini';
 
 interface SmartAddModalProps {
   onClose: () => void;
   onAddEvent: (event: Partial<CalendarEvent>) => void;
-  onAddMultipleEvents?: (events: Partial<CalendarEvent>[]) => void;
   onAddDocument: (doc: Partial<Document>) => void;
   events?: CalendarEvent[];
 }
 
-type Tab = 'EVENT' | 'DOCUMENT' | 'SCAN';
+type Tab = 'EVENT' | 'DOCUMENT';
 
-export const SmartAddModal: React.FC<SmartAddModalProps> = ({ onClose, onAddEvent, onAddMultipleEvents, onAddDocument, events }) => {
+export const SmartAddModal: React.FC<SmartAddModalProps> = ({ onClose, onAddEvent, onAddDocument, events }) => {
   const [activeTab, setActiveTab] = useState<Tab>('EVENT');
   
   // Conflict Warning State
   const [showConflictConfirm, setShowConflictConfirm] = useState(false);
   const [conflictingEvent, setConflictingEvent] = useState<CalendarEvent | null>(null);
-
-  // Scan State
-  const [scanFile, setScanFile] = useState<File | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scannedEvents, setScannedEvents] = useState<any[]>([]);
-  const [scanError, setScanError] = useState<string>('');
 
   // Event Form State
   const [eventData, setEventData] = useState({
@@ -110,95 +102,6 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({ onClose, onAddEven
     onClose();
   };
 
-  // --- SCAN Logic ---
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setScanFile(e.target.files[0]);
-      setScanError('');
-      setScannedEvents([]);
-    }
-  };
-
-  const handleScan = async () => {
-    if (!scanFile) return;
-    setIsScanning(true);
-    setScanError('');
-
-    try {
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.readAsDataURL(scanFile);
-      reader.onload = async () => {
-        const base64String = (reader.result as string).split(',')[1];
-        const mimeType = scanFile.type;
-
-        try {
-            const results = await extractScheduleFromImage(base64String, mimeType);
-            setScannedEvents(results);
-        } catch (err: any) {
-             setScanError('Lỗi khi phân tích hình ảnh: ' + (err.message || 'Không xác định'));
-        } finally {
-            setIsScanning(false);
-        }
-      };
-      reader.onerror = () => {
-        setScanError("Lỗi đọc file.");
-        setIsScanning(false);
-      }
-    } catch (e) {
-      setScanError("Có lỗi xảy ra.");
-      setIsScanning(false);
-    }
-  };
-
-  const handleImportScanned = () => {
-      if (!onAddMultipleEvents) return;
-      
-      const eventsToImport = scannedEvents.map(item => {
-          // Parse date and time string to Date objects
-          // Assuming item.day is YYYY-MM-DD or DD/MM/YYYY
-          // Assuming item.time is HH:MM
-          let datePart = item.day;
-          if (datePart.includes('/')) {
-              const parts = datePart.split('/');
-              if (parts.length === 3) datePart = `${parts[2]}-${parts[1]}-${parts[0]}`;
-          }
-          
-          const startStr = `${datePart}T${item.time}:00`;
-          const startDate = new Date(startStr);
-          const duration = item.durationMinutes || 90;
-          const endDate = new Date(startDate.getTime() + duration * 60000);
-
-          return {
-              title: item.title,
-              start: startDate,
-              end: endDate,
-              location: item.location,
-              type: mapType(item.type),
-              priority: mapPriority(item.priority),
-              description: "Được quét tự động từ lịch tuần."
-          }
-      });
-
-      onAddMultipleEvents(eventsToImport);
-      onClose();
-  };
-
-  const mapType = (str: string): EventType => {
-      const lower = (str || '').toLowerCase();
-      if (lower.includes('họp')) return EventType.MEETING;
-      if (lower.includes('công tác') || lower.includes('đi')) return EventType.BUSINESS_TRIP;
-      if (lower.includes('văn bản') || lower.includes('ký')) return EventType.DEEP_WORK;
-      return EventType.EVENT;
-  };
-
-  const mapPriority = (str: string): Priority => {
-      const lower = (str || '').toLowerCase();
-      if (lower.includes('khẩn') || lower.includes('gấp')) return Priority.URGENT;
-      if (lower.includes('quan trọng') || lower.includes('cao')) return Priority.HIGH;
-      return Priority.NORMAL;
-  }
-
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 relative max-h-[90vh] flex flex-col">
@@ -254,11 +157,9 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({ onClose, onAddEven
           <h2 className="text-xl font-bold flex items-center gap-2">
             {activeTab === 'EVENT' && <Calendar className="w-5 h-5" />}
             {activeTab === 'DOCUMENT' && <FileText className="w-5 h-5" />}
-            {activeTab === 'SCAN' && <ScanLine className="w-5 h-5" />}
             
             {activeTab === 'EVENT' && 'Thêm sự kiện mới'}
             {activeTab === 'DOCUMENT' && 'Thêm văn bản mới'}
-            {activeTab === 'SCAN' && 'Quét lịch công tác'}
           </h2>
           <button onClick={onClose} className="text-white/80 hover:text-white transition-colors">
             <X className="w-6 h-6" />
@@ -278,12 +179,6 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({ onClose, onAddEven
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'DOCUMENT' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:bg-gray-200'}`}
             >
                 <FileText className="w-4 h-4" /> Văn bản
-            </button>
-            <button 
-                onClick={() => setActiveTab('SCAN')}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'SCAN' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:bg-gray-200'}`}
-            >
-                <ScanLine className="w-4 h-4" /> Quét lịch
             </button>
         </div>
 
@@ -497,93 +392,6 @@ export const SmartAddModal: React.FC<SmartAddModalProps> = ({ onClose, onAddEven
                     </button>
                   </div>
               </form>
-          )}
-
-          {activeTab === 'SCAN' && (
-             <div className="space-y-6">
-                 {!scannedEvents.length ? (
-                     <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors">
-                        <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
-                            {isScanning ? <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" /> : <Upload className="w-8 h-8 text-indigo-600" />}
-                        </div>
-                        
-                        {isScanning ? (
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-800">Đang phân tích hình ảnh...</h3>
-                                <p className="text-sm text-gray-500 mt-2">Vui lòng đợi trong giây lát, AI đang đọc lịch công tác của bạn.</p>
-                            </div>
-                        ) : (
-                            <>
-                                <h3 className="text-lg font-bold text-gray-800">Tải lên lịch công tác</h3>
-                                <p className="text-sm text-gray-500 mt-2 mb-6 max-w-xs mx-auto">Chụp ảnh hoặc tải lên file ảnh (JPG, PNG) chứa bảng lịch tuần để hệ thống tự động quét.</p>
-                                
-                                <label className="cursor-pointer bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-semibold shadow-md hover:bg-indigo-700 transition-all flex items-center gap-2">
-                                    <Upload className="w-4 h-4" /> Chọn ảnh lịch
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
-                                </label>
-                            </>
-                        )}
-
-                        {scanFile && !isScanning && (
-                            <div className="mt-4 p-3 bg-gray-100 rounded-lg flex items-center gap-2 text-sm text-gray-700">
-                                <FileText className="w-4 h-4" /> {scanFile.name}
-                                <button onClick={handleScan} className="ml-2 text-indigo-600 font-bold hover:underline">Bắt đầu quét</button>
-                            </div>
-                        )}
-
-                        {scanError && (
-                            <div className="mt-4 text-red-600 text-sm font-medium flex items-center gap-1">
-                                <AlertTriangle className="w-4 h-4" /> {scanError}
-                            </div>
-                        )}
-                     </div>
-                 ) : (
-                     <div className="space-y-4">
-                         <div className="flex items-center justify-between">
-                            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                                <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                Đã tìm thấy {scannedEvents.length} sự kiện
-                            </h3>
-                            <button onClick={() => setScannedEvents([])} className="text-sm text-gray-500 hover:text-gray-700">Quét lại</button>
-                         </div>
-                         
-                         <div className="bg-gray-50 rounded-lg border border-gray-200 max-h-60 overflow-y-auto p-2 space-y-2">
-                             {scannedEvents.map((item, idx) => (
-                                 <div key={idx} className="bg-white p-3 rounded border border-gray-200 shadow-sm flex gap-3">
-                                     <div className="text-center min-w-[60px] border-r border-gray-100 pr-3">
-                                         <div className="text-xs font-bold text-indigo-600">{item.time}</div>
-                                         <div className="text-[10px] text-gray-500">{item.day}</div>
-                                     </div>
-                                     <div className="flex-1">
-                                         <div className="text-sm font-semibold text-gray-900">{item.title}</div>
-                                         <div className="text-xs text-gray-500 mt-1 flex gap-2">
-                                             {item.location && <span>📍 {item.location}</span>}
-                                             <span className="bg-gray-100 px-1.5 rounded">{item.type}</span>
-                                         </div>
-                                     </div>
-                                 </div>
-                             ))}
-                         </div>
-
-                         <div className="flex gap-3 justify-end pt-2">
-                             <button
-                                type="button"
-                                onClick={onClose}
-                                className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg transition-colors"
-                             >
-                                Hủy
-                             </button>
-                             <button
-                                type="button"
-                                onClick={handleImportScanned}
-                                className="px-6 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 shadow-md hover:shadow-lg transition-all"
-                             >
-                                Nhập vào lịch
-                             </button>
-                         </div>
-                     </div>
-                 )}
-             </div>
           )}
         </div>
       </div>
