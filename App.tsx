@@ -148,6 +148,20 @@ export default function App() {
     setEvents(prev => [...prev, newEvent]);
   };
 
+  const handleAddMultipleEvents = (newEvents: Partial<CalendarEvent>[]) => {
+    const formattedEvents: CalendarEvent[] = newEvents.map(e => ({
+        id: generateId(),
+        title: e.title || 'Sự kiện quét được',
+        start: e.start || new Date(),
+        end: e.end || new Date(new Date().getTime() + 3600000),
+        type: e.type || EventType.EVENT,
+        priority: e.priority || Priority.NORMAL,
+        location: e.location,
+        description: e.description
+    }));
+    setEvents(prev => [...prev, ...formattedEvents]);
+  };
+
   const handleUpdateEvent = (updatedEvent: CalendarEvent) => {
     setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e));
   };
@@ -442,6 +456,7 @@ export default function App() {
           events={events}
           onClose={() => setIsSmartAddOpen(false)} 
           onAddEvent={handleAddEvent}
+          onAddMultipleEvents={handleAddMultipleEvents}
           onAddDocument={handleAddDocument}
         />
       )}
