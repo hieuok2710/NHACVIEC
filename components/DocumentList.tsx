@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Document, DocumentStatus, Priority } from '../types';
 import { formatDate, getDocumentStatusColor, getPriorityColor } from '../utils';
-import { FileText, AlertTriangle, CheckCircle, Clock, ArrowRight, Bell, Plus, X, Save, Upload, Paperclip } from 'lucide-react';
+import { FileText, AlertTriangle, CheckCircle, Clock, ArrowRight, Bell, Plus, X, Save, Upload, Paperclip, Filter } from 'lucide-react';
 
 interface DocumentListProps {
   documents: Document[];
@@ -10,9 +10,11 @@ interface DocumentListProps {
 }
 
 type FilterType = 'ALL' | 'PENDING' | 'REMINDER';
+type DeadlineFilterType = 'ALL' | 'OVERDUE' | 'UPCOMING_3_DAYS';
 
 export const DocumentList: React.FC<DocumentListProps> = ({ documents, onUpdateStatus, onAddDocument }) => {
   const [filter, setFilter] = useState<FilterType>('ALL');
+  const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilterType>('ALL');
   const [isAdding, setIsAdding] = useState(false);
   const [fileName, setFileName] = useState('');
   const [newDoc, setNewDoc] = useState<{
@@ -38,10 +40,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({ documents, onUpdateS
 
   // Filter Logic
   const displayDocs = sortedDocs.filter(doc => {
+    // 1. Status Filter
+    let matchesStatus = true;
     if (filter === 'PENDING') {
-        return doc.status === DocumentStatus.PENDING || doc.status === DocumentStatus.IN_PROGRESS;
-    }
-    if (filter === 'REMINDER') {
+        matchesStatus = doc.status === DocumentStatus.PENDING || doc.status === DocumentStatus.IN_PROGRESS;
+    } else if (filter === 'REMINDER') {
         // Show urgent priority OR overdue items OR items due soon (within 3 days)
         const isUrgent = doc.priority === Priority.URGENT;
         const isOverdue = doc.status === DocumentStatus.OVERDUE;
@@ -54,9 +57,28 @@ export const DocumentList: React.FC<DocumentListProps> = ({ documents, onUpdateS
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         const isDueSoon = diffDays >= 0 && diffDays <= 3;
 
-        return isUrgent || isOverdue || isDueSoon;
+        matchesStatus = isUrgent || isOverdue || isDueSoon;
     }
-    return true;
+
+    // 2. Deadline Filter
+    let matchesDeadline = true;
+    if (deadlineFilter !== 'ALL') {
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const deadline = new Date(doc.deadline);
+        deadline.setHours(0,0,0,0); // Normalize to start of day for comparison
+
+        if (deadlineFilter === 'OVERDUE') {
+            matchesDeadline = deadline < today;
+        } else if (deadlineFilter === 'UPCOMING_3_DAYS') {
+            const diffTime = deadline.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            // 0 = today, 1 = tomorrow, 2 = day after, 3 = 3rd day
+            matchesDeadline = diffDays >= 0 && diffDays <= 3;
+        }
+    }
+
+    return matchesStatus && matchesDeadline;
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -270,26 +292,44 @@ export const DocumentList: React.FC<DocumentListProps> = ({ documents, onUpdateS
                   </button>
               )}
           </div>
-          <div className="flex gap-2 bg-gray-50 p-1 rounded-lg">
-              <button 
-                onClick={() => setFilter('ALL')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${filter === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'}`}
-              >
-                Tất cả
-              </button>
-              <button 
-                onClick={() => setFilter('PENDING')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${filter === 'PENDING' ? 'bg-white text-amber-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'}`}
-              >
-                Chờ ký
-              </button>
-              <button 
-                onClick={() => setFilter('REMINDER')}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${filter === 'REMINDER' ? 'bg-red-50 text-red-600 shadow-sm ring-1 ring-red-100' : 'text-gray-500 hover:bg-red-50 hover:text-red-500'}`}
-              >
-                <Bell className="w-3 h-3" />
-                Cần nhắc
-              </button>
+          
+          <div className="flex flex-col sm:flex-row gap-3 items-center">
+             {/* Deadline Filter */}
+             <div className="relative">
+                <Filter className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
+                <select 
+                    value={deadlineFilter}
+                    onChange={(e) => setDeadlineFilter(e.target.value as DeadlineFilterType)}
+                    className="pl-9 pr-8 py-1.5 rounded-lg border border-gray-200 text-sm font-medium focus:outline-none focus:border-indigo-500 bg-white text-gray-600 cursor-pointer hover:bg-gray-50 transition-colors"
+                >
+                    <option value="ALL">Tất cả thời hạn</option>
+                    <option value="UPCOMING_3_DAYS">Trong 3 ngày tới</option>
+                    <option value="OVERDUE">Đã quá hạn</option>
+                </select>
+             </div>
+
+             {/* Status Filter Buttons */}
+             <div className="flex gap-2 bg-gray-50 p-1 rounded-lg">
+                <button 
+                    onClick={() => setFilter('ALL')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${filter === 'ALL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'}`}
+                >
+                    Tất cả
+                </button>
+                <button 
+                    onClick={() => setFilter('PENDING')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${filter === 'PENDING' ? 'bg-white text-amber-600 shadow-sm' : 'text-gray-500 hover:bg-gray-200'}`}
+                >
+                    Chờ ký
+                </button>
+                <button 
+                    onClick={() => setFilter('REMINDER')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${filter === 'REMINDER' ? 'bg-red-50 text-red-600 shadow-sm ring-1 ring-red-100' : 'text-gray-500 hover:bg-red-50 hover:text-red-500'}`}
+                >
+                    <Bell className="w-3 h-3" />
+                    Cần nhắc
+                </button>
+             </div>
           </div>
         </div>
         <div className="overflow-x-auto">
